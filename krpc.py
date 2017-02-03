@@ -24,9 +24,9 @@ class Transaction(object):
         if self.callback: self.callback(self)
 
 class KRPC(UDPServer):
-    supported_methods = []
     def __init__(self, *args, **kwargs):
         UDPServer.__init__(self, *args, **kwargs)
+        self.supported_methods = []
         self.transactions = {}
         self.ip_vote = Counter()
         self.ip_vote[self.bind[0]] += 1
@@ -70,13 +70,13 @@ class KRPC(UDPServer):
                 self.handle_response(data, addr)
             if data.get("y") == "q":
                 self.handle_request(data, addr)
-            if data.get("y") == "e":
-                self.handle_error(data, addr)
+#            if data.get("y") == "e":
+#                self.handle_error(data, addr)
         except ValueError:
             print "Invalid packet. Dropping"
 
-    def handle_error(self, data, addr):
-        pass
+#    def handle_error(self, data, addr):
+#        pass
 
     def handle_response(self, data, addr):
         txn_id = data.get("t", "")

@@ -4,11 +4,25 @@ from routingtable import *
 from infohashtable import *
 from collections import Counter
 
-class DHTServer(KRPC):
-    supported_methods = ["ping", "find_node", "get_peers", "announce_peer"]
+class Tracker(object):
+    def __init__(self, dht, target):
+        self.dht = dht
+        self.target = target
+        self.dht.engine.add_interval(5, self.update_peers)
 
+    def update_peers(self):
+        self.dht.recurse(self.target, dht.get_peers, result_key="token").callback = self.do_announce
+
+    def do_announce(self, txn):
+        txn = txn.result
+        self.dht.announce_peer(txn.addr, self.target, txn.result["token"])
+        if "values" in txn.result:
+            print "PEERS", map(decode_addr, txn.result["values"])
+
+class DHTServer(KRPC):
     def __init__(self, *args, **kwargs):
         KRPC.__init__(self, *args, **kwargs)
+        self.supported_methods = ["ping", "find_node", "get_peers", "announce_peer"]
         self.id = "AAAA" + random(16)
         self.announce_key = random(32)
         self.rt = RoutingTable(self)
@@ -123,7 +137,7 @@ class DHTServer(KRPC):
                 self.rt.insert_nodes(nodes)
 
             if result_key and result_key in cb_txn.result:
-                txn.set_result(cb_txn.result)
+                txn.set_result(cb_txn)
                 return
 
             if attempt > attempts:
@@ -150,11 +164,7 @@ class DHTServer(KRPC):
 
 if __name__ == "__main__":
     eng = engine.Engine()
-    serv = DHTServer(eng, bind=("0.0.0.0", 1337))
+    dht = DHTServer(eng, bind=("0.0.0.0", 1337))
+    trck = Tracker(dht, "f68f96a2777bd46997e71c3acc29ad4ac07101df".decode("hex"))
 
-    def expand_routing_table():
-        for i in range(16):
-            serv.recurse(random(20), serv.find_node)
-
-#    eng.add_interval(10, expand_routing_table)
     eng.start()
