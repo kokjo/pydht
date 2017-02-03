@@ -9,7 +9,7 @@ class DHTServer(KRPC):
 
     def __init__(self, *args, **kwargs):
         KRPC.__init__(self, *args, **kwargs)
-        self.id = random(20)
+        self.id = "AAAA" + random(16)
         self.announce_key = random(32)
         self.rt = RoutingTable(self)
         self.infohashtable = InfoHashtable(self)
@@ -143,6 +143,9 @@ class DHTServer(KRPC):
 
     def reconnect(self):
         self.recurse(self.id, self.find_node)
+        nodes = self.rt.find_close_nodes(self.id)
+        for node in nodes:
+            self.ping(node.contact)
 
 
 if __name__ == "__main__":
