@@ -16,6 +16,7 @@ class Tracker(object):
     def do_announce(self, txn):
         txn = txn.result
         self.dht.announce_peer(txn.addr, self.target, txn.result["token"])
+        print "TRACKER", txn.result["id"].encode("hex")
         if "values" in txn.result:
             print "PEERS", map(decode_addr, txn.result["values"])
 
@@ -23,7 +24,7 @@ class DHTServer(KRPC):
     def __init__(self, *args, **kwargs):
         KRPC.__init__(self, *args, **kwargs)
         self.supported_methods = ["ping", "find_node", "get_peers", "announce_peer"]
-        self.id = "AAAA" + random(16)
+        self.id = random(20)
         self.announce_key = random(32)
         self.rt = RoutingTable(self)
         self.infohashtable = InfoHashtable(self)
@@ -49,6 +50,7 @@ class DHTServer(KRPC):
     def verify_announce_token(self, node, info_hash, token):
         return self.make_announce_token(node, info_hash) == token
 
+
     def handle_request(self, data, addr):
         if addr in self.rt.bad: return
         if addr[0] in self.ip_vote.keys(): return
@@ -67,8 +69,6 @@ class DHTServer(KRPC):
         KRPC.handle_request(self, data, addr)
 
     def request_ping(self, args, addr):
-        id = args["id"]
-        self.rt.insert_node(Node(addr, id))
         return {"id": self.id}
 
     def request_find_node(self, args, addr):
@@ -107,7 +107,7 @@ class DHTServer(KRPC):
                 id = self.id,
                 implied_port = 1,
                 info_hash = info_hash,
-                port = 1337,
+                port = 0,
                 token = token,
             )
 
@@ -125,8 +125,14 @@ class DHTServer(KRPC):
         return self.make_request(addr, "sample_infohashes",
                 id = self.id, target = target
             )
+    def send_near(self, target, func, avoid=[], callback=None):
+        nodes = self.rt.find_close_nodes(target)
+        for node in nodes:
+            if node.contact in avoid: continue
+            func(node.contact, target).callback = callback
+        return [node.contact for node in nodes]
 
-    def recurse(self, target, function, result_key=None, attempts=10):
+    def recurse(self, target, func, result_key=None, attempts=5):
         txn = Transaction()
 
         visited = set()
@@ -138,33 +144,24 @@ class DHTServer(KRPC):
 
             if result_key and result_key in cb_txn.result:
                 txn.set_result(cb_txn)
-                return
 
-            if attempt > attempts:
-                return
+            if attempt > attempts: return
 
-            nodes = self.rt.find_close_nodes(target)
-            for node in nodes:
-                if node.contact in visited: continue
-                visited.add(node.contact)
-                function(node.contact, target).callback = lambda cb_txn: callback(attempt+1, cb_txn)
+            addrs = self.send_near(target, func, visited, callback=lambda cb_txn: callback(attempt+1, cb_txn))
+            visited.update(addrs)
 
-        nodes = self.rt.find_close_nodes(target)
-        for node in nodes:
-            function(node.contact, target).callback = lambda cb_txn: callback(0, cb_txn)
+        addrs = self.send_near(target, func, visited, callback=lambda cb_txn: callback(0, cb_txn))
+        visited.update(addrs)
 
         return txn
 
     def reconnect(self):
         self.recurse(self.id, self.find_node)
-        nodes = self.rt.find_close_nodes(self.id)
-        for node in nodes:
-            self.ping(node.contact)
-
+        self.recurse(random(20), self.find_node)
 
 if __name__ == "__main__":
     eng = engine.Engine()
-    dht = DHTServer(eng, bind=("0.0.0.0", 1337))
-    trck = Tracker(dht, "f68f96a2777bd46997e71c3acc29ad4ac07101df".decode("hex"))
+    dht = DHTServer(eng, bind=("0.0.0.0", 0))
+    trck = Tracker(dht, "ee8f96a2777bd46997e71c3acc29ad4ac07101df".decode("hex"))
 
     eng.start()

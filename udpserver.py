@@ -21,9 +21,9 @@ class UDPServer(object):
             try:
                 self.handle_packet(data, addr)
             except:
-                self.handle_error(addr)
+                self.handle_error(data, addr)
 
-    def handle_error(self, addr):
+    def handle_error(self, data, addr):
         print "-"*40
         print "Error handing packet from %s:%d" % (addr[0], addr[1])
         import traceback
@@ -50,5 +50,5 @@ class TestServer(UDPServer):
 if __name__ == "__main__":
     import engine
     eng = engine.Engine()
-    serv = TestServer(eng, bind=("0.0.0.0", 1337))
+    serv = TestServer(eng, bind=("0.0.0.0", 0))
     eng.start()
