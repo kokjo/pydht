@@ -13,8 +13,8 @@ class RoutingTable(object):
         self.bad = set()
         self.seen = set()
         eng = self.dht.engine
-        self.cleanup_timer = eng.add_interval(60, self.cleanup)
-        self.maintain_timer = eng.add_interval(5, self.maintain)
+        self.cleanup_timer = eng.add_interval(30, self.cleanup)
+        self.maintain_timer = eng.add_interval(10, self.maintain)
         self.bootstrap()
 
     @property
@@ -51,7 +51,7 @@ class RoutingTable(object):
         self.remove_node(node)
         self.bad_addr(node.contact)
 
-    def find_close_nodes(self, target, N=5):
+    def find_close_nodes(self, target, N=8):
         prefix = target[:PREFIX_SIZE]
         bucket = self.buckets[prefix]
         nodes = list(bucket)
@@ -59,7 +59,7 @@ class RoutingTable(object):
         nodes.sort(key=lambda x: xor(target, x.id))
         return nodes[:N]
 
-    def sample(self, N=5):
+    def sample(self, N=8):
         bucket = choice(self.buckets.values())
         return sample(bucket, min(N, len(bucket)))
 
@@ -73,11 +73,12 @@ class RoutingTable(object):
         self.insert_node(node)
 
     def maintain(self):
-        for node in self.sample(10):
+        for node in self.sample():
             self.dht.ping(node.contact).callback = self.ping_reply
 
     def cleanup(self):
         self.seen = set()
+        self.bad = set()
 
         for bucket in self.buckets.values():
             for node in list(bucket):
@@ -86,6 +87,6 @@ class RoutingTable(object):
 
         for prefix in self.buckets.keys():
             try:
-                self.buckets[prefix] = set(sample(self.buckets[prefix], 100))
+                self.buckets[prefix] = set(sample(self.buckets[prefix], 10))
             except ValueError:
                 pass

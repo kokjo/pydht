@@ -3,12 +3,18 @@ from krpc import *
 from routingtable import *
 from infohashtable import *
 from collections import Counter
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
 
 class Tracker(object):
     def __init__(self, dht, target):
         self.dht = dht
         self.target = target
+        self.log = logging.getLogger("dht.trk.%s" % self.target.encode("hex"))
         self.dht.engine.add_interval(5, self.update_peers)
+        self.log.info("Tracking %s", self.target.encode("hex"))
 
     def update_peers(self):
         self.dht.recurse(self.target, dht.get_peers, result_key="token").callback = self.do_announce
@@ -16,15 +22,22 @@ class Tracker(object):
     def do_announce(self, txn):
         txn = txn.result
         self.dht.announce_peer(txn.addr, self.target, txn.result["token"])
-        print "TRACKER", txn.result["id"].encode("hex")
+
+        if self.target[:8] == txn.result["id"][:8]:
+            self.log.info("Banning %s:%d", txn.addr[0], txn.addr[1])
+            self.dht.rt.bad_node(Node(txn.addr, txn.result["id"]))
+            return
+
         if "values" in txn.result:
-            print "PEERS", map(decode_addr, txn.result["values"])
+            peers = map(decode_addr, txn.result["values"])
+            self.log.info("Found peers: %r", peers)
 
 class DHTServer(KRPC):
     def __init__(self, *args, **kwargs):
         KRPC.__init__(self, *args, **kwargs)
         self.supported_methods = ["ping", "find_node", "get_peers", "announce_peer"]
         self.id = random(20)
+        self.log = logging.getLogger("dht.dht.%s" % self.id.encode("hex"))
         self.announce_key = random(32)
         self.rt = RoutingTable(self)
         self.infohashtable = InfoHashtable(self)
@@ -33,14 +46,12 @@ class DHTServer(KRPC):
         self.engine.add_interval(5, self.reconnect)
 
     def print_status(self):
-        print "="*40
-        print "Node id:", self.id.encode("hex")
-        print "Our contact address:", self.ip_vote.keys()
-        print "Number of stale transactions:", len(self.transactions)
-        print "Number of buckets in routing table:", len(self.rt.buckets)
-        print "Number of nodes in routing table:", self.rt.size
-        print "Number of info_hash:", len(self.infohashtable.table)
-        print "="*40
+        self.log.info("="*40)
+        self.log.info("Our contact address: %r", self.ip_vote.keys())
+        self.log.info("Number of stale transactions: %d", len(self.transactions))
+        self.log.info("Number of nodes in routing table: %d", self.rt.size)
+        self.log.info("Number of info_hash: %d", len(self.infohashtable.table))
+        self.log.info("="*40)
 
     def make_announce_token(self, node, info_hash):
         toktime = int(time.time())
@@ -49,7 +60,6 @@ class DHTServer(KRPC):
 
     def verify_announce_token(self, node, info_hash, token):
         return self.make_announce_token(node, info_hash) == token
-
 
     def handle_request(self, data, addr):
         if addr in self.rt.bad: return
@@ -65,7 +75,7 @@ class DHTServer(KRPC):
                 return
             self.rt.insert_node(Node(addr, args["id"]))
 
-        print "%s - %s(%r)" % (token[:2].encode("hex"), met, args)
+        #print "%s - %s(%r)" % (token[:2].encode("hex"), met, args)
         KRPC.handle_request(self, data, addr)
 
     def request_ping(self, args, addr):
@@ -125,6 +135,7 @@ class DHTServer(KRPC):
         return self.make_request(addr, "sample_infohashes",
                 id = self.id, target = target
             )
+
     def send_near(self, target, func, avoid=[], callback=None):
         nodes = self.rt.find_close_nodes(target)
         for node in nodes:
