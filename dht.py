@@ -46,6 +46,8 @@ class DHTServer(KRPC):
         self.engine.add_interval(10, self.print_status)
         self.engine.add_interval(5, self.reconnect)
 
+        self.rt.bootstrap()
+
     def print_status(self):
         self.log.info("="*40)
         self.log.info("Our contact address: %r", self.ip_vote.keys())
