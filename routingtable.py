@@ -1,5 +1,7 @@
 import time
 import collections
+import pickle
+import logging
 from random import choice, sample
 from krpc import *
 
@@ -60,12 +62,21 @@ class RoutingTable(object):
         return nodes[:N]
 
     def sample(self, N=8):
-        bucket = choice(self.buckets.values())
-        return sample(bucket, min(N, len(bucket)))
+        nodes = []
+        for bucket in self.buckets.values():
+            nodes.extend(list(bucket))
+            
+
+        return sample(nodes, min(N, len(nodes)))
 
     def bootstrap(self):
-        addr = get_bootstrap_addr()
-        self.dht.ping(addr).callback = self.ping_reply
+        try:
+            with open("rt.pickle", "r") as fp:
+                for node in pickle.load(fp):
+                    self.insert_node(Node(node[0], node[1]))
+        except:
+            addr = get_bootstrap_addr()
+            self.dht.ping(addr).callback = self.ping_reply
 
     def ping_reply(self, txn):
         node = Node(txn.addr, txn.result["id"])
@@ -77,6 +88,7 @@ class RoutingTable(object):
             self.dht.ping(node.contact).callback = self.ping_reply
 
     def cleanup(self):
+
         self.seen = set()
         self.bad = set()
 
@@ -90,3 +102,11 @@ class RoutingTable(object):
                 self.buckets[prefix] = set(sample(self.buckets[prefix], 10))
             except ValueError:
                 pass
+
+        nodes = []
+        for node in self.sample(1000):
+            nodes.append((node.contact, node.id))
+
+        with open("rt.pickle", "w") as fp:
+            pickle.dump(nodes, fp)
+

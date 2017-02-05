@@ -15,6 +15,7 @@ class Tracker(object):
         self.log = logging.getLogger("dht.trk.%s" % self.target.encode("hex"))
         self.dht.engine.add_interval(5, self.update_peers)
         self.log.info("Tracking %s", self.target.encode("hex"))
+        self.update_peers()
 
     def update_peers(self):
         self.dht.recurse(self.target, dht.get_peers, result_key="token").callback = self.do_announce
@@ -60,6 +61,12 @@ class DHTServer(KRPC):
 
     def verify_announce_token(self, node, info_hash, token):
         return self.make_announce_token(node, info_hash) == token
+
+    def send_packet(self, data, addr):
+        if addr in self.rt.bad:
+            self.log.info("Dropping packet to bad node")
+            return
+        KRPC.send_packet(self, data, addr)
 
     def handle_request(self, data, addr):
         if addr in self.rt.bad: return

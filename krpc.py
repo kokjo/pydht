@@ -30,6 +30,11 @@ class KRPC(UDPServer):
         self.transactions = {}
         self.ip_vote = Counter()
         self.ip_vote[self.bind[0]] += 1
+        self.engine.add_interval(60, self.reset_ip)
+
+    def reset_ip(self):
+        self.ip_vote = Counter()
+        self.ip_vote[self.bind[0]] += 1
 
     def send_packet(self, data, addr):
         if addr[0] in self.ip_vote.keys(): return
