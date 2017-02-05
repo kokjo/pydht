@@ -17,7 +17,7 @@ class RoutingTable(object):
         eng = self.dht.engine
         self.cleanup_timer = eng.add_interval(30, self.cleanup)
         self.maintain_timer = eng.add_interval(10, self.maintain)
-        self.bootstrap()
+#        self.bootstrap()
 
     @property
     def size(self):
