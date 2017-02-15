@@ -1,0 +1,7 @@
+*.pyc
+*.swp
+*.pickle
+*.key
+*.cert
+*.pub
+*.sec
