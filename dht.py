@@ -5,14 +5,12 @@ from infohashtable import *
 from collections import Counter
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
-
 
 class Tracker(object):
     def __init__(self, dht, target):
         self.dht = dht
         self.target = target
-        self.log = logging.getLogger("dht.trk.%s" % self.target.encode("hex"))
+        self.log = logging.getLogger("dht.tracker.%s" % self.target.encode("hex"))
         self.dht.engine.add_interval(5, self.update_peers)
         self.log.info("Tracking %s", self.target.encode("hex"))
         self.update_peers()
@@ -21,17 +19,21 @@ class Tracker(object):
         self.dht.recurse(self.target, dht.get_peers, result_key="token").callback = self.do_announce
 
     def do_announce(self, txn):
+        print txn.result
         txn = txn.result
         self.dht.announce_peer(txn.addr, self.target, txn.result["token"])
 
         if self.target[:8] == txn.result["id"][:8]:
-            self.log.info("Banning %s:%d", txn.addr[0], txn.addr[1])
+            self.log.debug("Banning %s:%d", txn.addr[0], txn.addr[1])
             self.dht.rt.bad_node(Node(txn.addr, txn.result["id"]))
             return
 
         if "values" in txn.result:
             peers = map(decode_addr, txn.result["values"])
             self.log.info("Found peers: %r", peers)
+
+    def on_peers(self, peers):
+        pass
 
 class DHTServer(KRPC):
     def __init__(self, *args, **kwargs):
@@ -66,7 +68,7 @@ class DHTServer(KRPC):
 
     def send_packet(self, data, addr):
         if addr in self.rt.bad:
-            self.log.info("Dropping packet to bad node")
+            self.log.debug("Dropping packet to bad node")
             return
         KRPC.send_packet(self, data, addr)
 
@@ -154,10 +156,12 @@ class DHTServer(KRPC):
 
     def recurse(self, target, func, result_key=None, attempts=5):
         txn = Transaction()
+        log = logging.getLogger("dht.recurse.%s" % target.encode("hex"))
 
         visited = set()
 
         def callback(attempt, cb_txn):
+            log.debug("Visited %s", cb_txn.result["id"].encode("hex"))
             if "nodes" in cb_txn.result:
                 nodes = decode_nodes(cb_txn.result["nodes"])
                 self.rt.insert_nodes(nodes)
@@ -170,17 +174,21 @@ class DHTServer(KRPC):
             addrs = self.send_near(target, func, visited, callback=lambda cb_txn: callback(attempt+1, cb_txn))
             visited.update(addrs)
 
+        log.info("Recursing to %s", target.encode("hex"))
         addrs = self.send_near(target, func, visited, callback=lambda cb_txn: callback(0, cb_txn))
         visited.update(addrs)
 
         return txn
 
     def reconnect(self):
+        self.log.info("Reconnecting to DHT")
         self.recurse(self.id, self.find_node)
-        self.recurse(random(20), self.find_node)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+
     eng = engine.Engine()
+    #rt = routingtable.RoutingTable(
     dht = DHTServer(eng, bind=("0.0.0.0", 0))
     trck = Tracker(dht, "228f96a2777bd46997e71c3acc29ad4ac07101df".decode("hex"))
 

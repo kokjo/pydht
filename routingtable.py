@@ -17,7 +17,6 @@ class RoutingTable(object):
         eng = self.dht.engine
         self.cleanup_timer = eng.add_interval(30, self.cleanup)
         self.maintain_timer = eng.add_interval(10, self.maintain)
-#        self.bootstrap()
 
     @property
     def size(self):
@@ -69,14 +68,18 @@ class RoutingTable(object):
 
         return sample(nodes, min(N, len(nodes)))
 
+    def load(self, filename="rt.pickle"):
+        with open(filename, "r") as fp:
+            for node in pickle.load(fp):
+                self.insert_node(Node(node[0], node[1]))
+
+
     def bootstrap(self):
         try:
-            with open("rt.pickle", "r") as fp:
-                for node in pickle.load(fp):
-                    self.insert_node(Node(node[0], node[1]))
+            self.load()
         except:
-            addr = get_bootstrap_addr()
-            self.dht.ping(addr).callback = self.ping_reply
+            pass
+        self.maintain()
 
     def ping_reply(self, txn):
         node = Node(txn.addr, txn.result["id"])
@@ -84,13 +87,17 @@ class RoutingTable(object):
         self.insert_node(node)
 
     def maintain(self):
+        if self.size < 100:
+            addr = get_bootstrap_addr()
+            self.dht.ping(addr).callback = self.ping_reply
         for node in self.sample():
             self.dht.ping(node.contact).callback = self.ping_reply
 
     def cleanup(self):
-
         self.seen = set()
         self.bad = set()
+
+        if self.size < 1000: return
 
         for bucket in self.buckets.values():
             for node in list(bucket):

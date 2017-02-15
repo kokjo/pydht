@@ -4,6 +4,10 @@ from engine import *
 from collections import Counter
 from utils import *
 
+import logging
+
+log = logging.getLogger(__name__)
+
 class UnsupportedMethod(Exception): pass
 
 class RequestFailed(Exception): pass
@@ -33,11 +37,14 @@ class KRPC(UDPServer):
         self.engine.add_interval(60, self.reset_ip)
 
     def reset_ip(self):
+        log.debug("Resetting ip address vote")
         self.ip_vote = Counter()
         self.ip_vote[self.bind[0]] += 1
 
     def send_packet(self, data, addr):
-        if addr[0] in self.ip_vote.keys(): return
+        if addr[0] in self.ip_vote.keys():
+            log.debug("Dropping packet to ourself")
+            return
         UDPServer.send_packet(self, data, addr)
 
     def send_krpc(self, req, addr, timeout=5):
@@ -58,6 +65,7 @@ class KRPC(UDPServer):
         return txn
 
     def timeout_transaction(self, txnid):
+        log.debug("transaction %s timeouted" % txnid.encode("hex"))
         if txnid in self.transactions:
             del self.transactions[txnid]
 
@@ -75,13 +83,9 @@ class KRPC(UDPServer):
                 self.handle_response(data, addr)
             if data.get("y") == "q":
                 self.handle_request(data, addr)
-#            if data.get("y") == "e":
-#                self.handle_error(data, addr)
         except ValueError:
-            print "Invalid packet. Dropping"
+            log.info("Invalid packet from %r. Dropping", addr)
 
-#    def handle_error(self, data, addr):
-#        pass
 
     def handle_response(self, data, addr):
         txn_id = data.get("t", "")
