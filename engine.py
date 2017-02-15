@@ -37,12 +37,14 @@ class Engine(object):
     def start(self):
         while True:
             timeout = -1
-            try:
+            if self.timers:
                 timeout = min([timer.time_left for timer in self.timers])
-            except ValueError:
-                pass
 
-            events = self.epoll.poll(timeout)
+            try:
+                events = self.epoll.poll(timeout)
+            except IOError as e:
+                if e.errno == 4: continue
+
             for (fd, event) in events:
                 self.servers[fd].handle_event(event)
 
