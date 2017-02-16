@@ -185,7 +185,7 @@ class DHTServer(KRPC):
         self.recurse(self.id, self.find_node)
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     eng = engine.Engine()
     #rt = routingtable.RoutingTable(
