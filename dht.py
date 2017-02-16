@@ -19,7 +19,6 @@ class Tracker(object):
         self.dht.recurse(self.target, dht.get_peers, result_key="token").callback = self.do_announce
 
     def do_announce(self, txn):
-        print txn.result
         txn = txn.result
         self.dht.announce_peer(txn.addr, self.target, txn.result["token"])
 
